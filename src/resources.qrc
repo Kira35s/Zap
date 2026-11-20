@@ -1,0 +1,20 @@
+<RCC>
+    <qresource prefix="/">
+        <file alias="Main.qml">Main.qml</file>
+        <file alias="NavRail.qml">NavRail.qml</file>
+        <file alias="CategoryList.qml">CategoryList.qml</file>
+        <file alias="EntryPage.qml">EntryPage.qml</file>
+        <file alias="PosterGrid.qml">PosterGrid.qml</file>
+        <file alias="GuideGrid.qml">GuideGrid.qml</file>
+        <file alias="SeriesPage.qml">SeriesPage.qml</file>
+        <file alias="PlayerView.qml">PlayerView.qml</file>
+        <file alias="InfoPane.qml">InfoPane.qml</file>
+        <file alias="SourcesPage.qml">SourcesPage.qml</file>
+        <file alias="SettingsPage.qml">SettingsPage.qml</file>
+        <file alias="HelpOverlay.qml">HelpOverlay.qml</file>
+        <file alias="ProblemBanner.qml">ProblemBanner.qml</file>
+        <file alias="zap.svg">../pkgbuild/zap.svg</file>
+        <file alias="i18n/en.json">i18n/en.json</file>
+        <file alias="i18n/fr.json">i18n/fr.json</file>
+    </qresource>
+</RCC>

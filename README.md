@@ -1,2 +1,77 @@
 # Zap
-IPTV app for Omarchy
+
+![Zap showing live channels with their TV guide](docs/screenshot.png)
+
+Zap is an IPTV player for Omarchy: live channels with their TV guide, movies
+and series, from Xtream Codes accounts and M3U playlists. It follows the
+Omarchy theme and language, and everything works from the keyboard.
+
+- **Live TV** with what's on now and next, previewed beside the list; Enter
+  again fills the screen, and ↑ ↓ change channel.
+- **TV guide**: a grid of channels and programmes from the provider's XMLTV
+  guide (plain or gzipped), matched by guide id or by channel name.
+- **Movies** and **series**, with seasons and episodes; the next episode
+  starts when one ends.
+- **Favourites**, **continue watching** (resume points for movies and
+  episodes), and a search across everything.
+- **Settings** (8): Zap follows the Omarchy language, or one picked for Zap
+  alone (Français, English) without changing the rest of the desktop.
+- Several sources at once. Lists are cached and refreshed daily, the guide
+  twice a day, or on demand with R.
+
+## Sources
+
+Press 7 and add a source:
+
+- **Xtream Codes**: the server address, username and password your provider
+  gave you. The live, movie and series lists and the guide come from the
+  server; a different XMLTV guide address can be given instead.
+- **M3U playlist**: a web address or a file path. Channels, movies
+  (`/movie/` or video-file addresses) and series episodes (`/series/`, or
+  names with `S01E02`) are sorted apart. The guide comes from the playlist's
+  `url-tvg`, or from the address you give.
+
+Sources, with their passwords, are kept in `~/.config/zap/sources.json`,
+readable only by you. Favourites and resume points are in
+`~/.local/share/zap/state.json`, and downloaded lists, guides and images in
+`~/.cache/zap`.
+
+## Keyboard
+
+| Key | Action |
+| --- | --- |
+| `1` – `8` | Live TV, TV guide, movies, series, favourites, continue watching, sources, settings |
+| `/` or `Ctrl+F` | Search |
+| `↑` `↓` `←` `→` | Move; Left goes back to the categories |
+| `Enter` | Play, or open a series; on the playing channel, full screen |
+| `Esc` | Back: leave full screen, close the series, clear the search |
+| `Space` | Pause and resume |
+| `↑` `↓`, `PgUp` `PgDn` | Previous and next channel while watching |
+| `←` `→`, `Shift+←` `→` | Skip 10 seconds or 1 minute in a movie or an episode |
+| `←` `→` in a series | Change season |
+| `F` | Add to or remove from favourites |
+| `M` | Mute |
+| `+` `-` | Volume |
+| `X` | Stop playing |
+| `O` | Open in mpv |
+| `R` | Refresh the lists and the TV guide |
+| `Del` | Remove from continue watching |
+| `F11` | Full-screen window |
+| `?` | Show every shortcut |
+| `Q` | Quit |
+
+## Building
+
+Zap is C++ and Qt Quick, built with qmake6 and make. Playback goes through
+Qt Multimedia's FFmpeg backend; a stream it can't play opens in mpv with O.
+
+```sh
+bin/build      # build/zap
+bin/test       # the Qt Test suite, offscreen
+bin/install    # makepkg -fsi: installs zap, its icon and its launcher entry
+```
+
+## License
+
+MIT. Theme and language handling follow Omacut and Monologue by David
+Heinemeier Hansson, under the MIT License.

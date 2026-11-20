@@ -1,0 +1,24 @@
+pkgname=zap
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='IPTV player: live TV with its guide, movies and series from Xtream Codes and M3U'
+arch=('x86_64' 'aarch64')
+license=('MIT')
+depends=('qt6-base' 'qt6-declarative' 'qt6-multimedia' 'qt6-multimedia-ffmpeg' 'qt6-wayland' 'zlib')
+optdepends=('mpv: open a stream in mpv with O')
+makedepends=('gcc' 'make')
+source=()
+sha256sums=()
+
+build() {
+  cd "$startdir/.."
+  ./bin/build
+}
+
+package() {
+  cd "$startdir/.."
+  install -Dm755 build/zap "$pkgdir/usr/bin/zap"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 "$startdir/zap.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/zap.svg"
+  install -Dm644 "$startdir/zap.desktop" "$pkgdir/usr/share/applications/zap.desktop"
+}

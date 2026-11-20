@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=Zap
+Name[fr]=Zap
+GenericName=IPTV Player
+GenericName[fr]=Lecteur IPTV
+Comment=Watch live TV with its guide, movies and series from IPTV providers
+Comment[fr]=Regarder la TV en direct avec son guide, des films et des séries depuis vos fournisseurs IPTV
+Exec=zap
+Icon=zap
+Terminal=false
+Categories=AudioVideo;Video;TV;Player;
+Keywords=iptv;tv;m3u;xtream;epg;live;
+StartupWMClass=zap
