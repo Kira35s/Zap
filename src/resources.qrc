@@ -7,6 +7,7 @@
         <file alias="PosterGrid.qml">PosterGrid.qml</file>
         <file alias="GuideGrid.qml">GuideGrid.qml</file>
         <file alias="SeriesPage.qml">SeriesPage.qml</file>
+        <file alias="MoviePage.qml">MoviePage.qml</file>
         <file alias="PlayerView.qml">PlayerView.qml</file>
         <file alias="InfoPane.qml">InfoPane.qml</file>
         <file alias="SourcesPage.qml">SourcesPage.qml</file>

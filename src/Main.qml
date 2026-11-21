@@ -81,12 +81,17 @@ ApplicationWindow {
         if (expand)
             setExpanded(true)
     }
-    function activate(key) {
+    // direct skips a movie's sheet; "Continue watching" always resumes straight away.
+    function activate(key, direct) {
         if (!key)
             return
         const e = backend.entry(key)
         if (e.kind === "series") {
             backend.openSeries(key)
+            return
+        }
+        if (e.kind === "movie" && !direct && backend.section !== "continue") {
+            backend.openMovie(key)
             return
         }
         if (e.kind === "live") {
@@ -147,15 +152,79 @@ ApplicationWindow {
         }
     }
 
+    // Audio and subtitle tracks. The language picked last is tried first on
+    // whatever plays next; "*" means subtitles on in whatever language there is.
+
+    // Qt doesn't always signal a track switch, so the labels follow this.
+    property int trackRevision: 0
+    function tracks(kind) {
+        const list = kind === "audio" ? player.audioTracks : player.subtitleTracks
+        const described = []
+        for (let i = 0; i < list.length; ++i)
+            described.push(backend.describeTrack(list[i], i))
+        return described
+    }
+    function applyTrackPreferences() {
+        const audio = tracks("audio")
+        for (let i = 0; i < audio.length; ++i)
+            if (backend.audioLanguage && audio[i].language === backend.audioLanguage) {
+                if (player.activeAudioTrack !== i)
+                    player.activeAudioTrack = i
+                break
+            }
+        const subtitles = tracks("subtitle")
+        let subtitle = -1
+        if (backend.subtitleLanguage === "*" && subtitles.length > 0)
+            subtitle = 0
+        for (let j = 0; j < subtitles.length && subtitle < 0; ++j)
+            if (backend.subtitleLanguage && subtitles[j].language === backend.subtitleLanguage)
+                subtitle = j
+        if (player.activeSubtitleTrack !== subtitle)
+            player.activeSubtitleTrack = subtitle
+        ++trackRevision
+    }
+    function chooseAudio(index) {
+        const track = tracks("audio")[index]
+        if (!track)
+            return
+        player.activeAudioTrack = index
+        ++trackRevision
+        if (track.language)
+            backend.audioLanguage = track.language
+        playerView.notice(qsTr("Audio: %1").arg(track.label))
+    }
+    function chooseSubtitle(index) {
+        const track = tracks("subtitle")[index]
+        player.activeSubtitleTrack = track ? index : -1
+        ++trackRevision
+        backend.subtitleLanguage = track ? (track.language || "*") : ""
+        playerView.notice(track ? qsTr("Subtitles: %1").arg(track.label) : qsTr("Subtitles off"))
+    }
+    function cycleAudio() {
+        const count = player.audioTracks.length
+        if (count < 2)
+            playerView.notice(count === 0 ? qsTr("No audio track to choose from") : qsTr("Only one audio track"))
+        else
+            chooseAudio((Math.max(0, player.activeAudioTrack) + 1) % count)
+    }
+    function cycleSubtitles() {
+        const count = player.subtitleTracks.length
+        if (count === 0)
+            playerView.notice(qsTr("No subtitles in this stream"))
+        else
+            chooseSubtitle(player.activeSubtitleTrack + 1 < count ? player.activeSubtitleTrack + 1 : -1)
+    }
+
     // Navigation
 
     function goSection(id) {
         backend.section = id
         Qt.callLater(restoreFocus)
     }
+    readonly property var currentPage: detailLoader.item || contentLoader.item
     function restoreFocus() {
-        if (contentLoader.item)
-            contentLoader.item.forceActiveFocus()
+        if (currentPage)
+            currentPage.forceActiveFocus()
     }
     function focusCategories() {
         if (categoryList.visible)
@@ -171,7 +240,10 @@ ApplicationWindow {
             helpVisible = false
         else if (expanded)
             isLive ? setExpanded(false) : stop()
-        else if (contentLoader.item && contentLoader.item.back && contentLoader.item.back())
+        else if (backend.movieOpen) {
+            backend.closeMovie()
+            Qt.callLater(restoreFocus)
+        } else if (!detailLoader.item && contentLoader.item && contentLoader.item.back && contentLoader.item.back())
             return
         else if (backend.seriesOpen) {
             backend.closeSeries()
@@ -202,6 +274,7 @@ ApplicationWindow {
             }
         }
         onSeekableChanged: win.applyPendingSeek()
+        onTracksChanged: win.applyTrackPreferences()
     }
 
     Timer {
@@ -263,6 +336,8 @@ ApplicationWindow {
             }
         }
     }
+    Shortcut { sequence: "A"; context: Qt.ApplicationShortcut; enabled: win.playingKey !== ""; onActivated: win.cycleAudio() }
+    Shortcut { sequence: "S"; context: Qt.ApplicationShortcut; enabled: win.playingKey !== ""; onActivated: win.cycleSubtitles() }
     Shortcut { sequence: "M"; context: Qt.ApplicationShortcut; onActivated: { audio.muted = !audio.muted; playerView.showOsd() } }
     Shortcut { sequence: "X"; context: Qt.ApplicationShortcut; enabled: win.playingKey !== ""; onActivated: win.stop() }
     Shortcut { sequences: ["+", "="]; context: Qt.ApplicationShortcut; onActivated: { backend.volume = backend.volume + 0.1; playerView.showOsd() } }
@@ -311,22 +386,35 @@ ApplicationWindow {
                 id: categoryList
                 Layout.fillHeight: true
                 Layout.preferredWidth: 260
-                visible: backend.categories.length > 0 && !backend.seriesOpen
+                visible: backend.categories.length > 0 && !backend.seriesOpen && !backend.movieOpen
             }
 
-            Loader {
-                id: contentLoader
+            // A movie's sheet or a series' episodes open over the list, which
+            // keeps its place underneath for when they close.
+            Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.preferredWidth: 0
                 Layout.preferredHeight: 0
-                sourceComponent: backend.section === "settings" ? settingsPage
-                               : backend.section === "sources" ? sourcesPage
-                               : backend.seriesOpen ? seriesPage
-                               : backend.section === "guide" ? guidePage
-                               : backend.section === "movies" || backend.section === "series" ? gridPage
-                               : listPage
-                onLoaded: Qt.callLater(win.restoreFocus)
+
+                Loader {
+                    id: contentLoader
+                    anchors.fill: parent
+                    visible: !detailLoader.item
+                    sourceComponent: backend.section === "settings" ? settingsPage
+                                   : backend.section === "sources" ? sourcesPage
+                                   : backend.section === "guide" ? guidePage
+                                   : backend.section === "movies" || backend.section === "series" ? gridPage
+                                   : listPage
+                    onLoaded: Qt.callLater(win.restoreFocus)
+                }
+                Loader {
+                    id: detailLoader
+                    anchors.fill: parent
+                    sourceComponent: backend.movieOpen ? moviePage : backend.seriesOpen ? seriesPage : null
+                    onLoaded: Qt.callLater(win.restoreFocus)
+                    onItemChanged: if (!item) Qt.callLater(win.restoreFocus)
+                }
             }
 
             InfoPane {
@@ -335,6 +423,7 @@ ApplicationWindow {
                 Layout.preferredWidth: Math.round(root.width * 0.3)
                 Layout.preferredHeight: 0
                 visible: backend.section !== "guide" && backend.section !== "sources" && backend.section !== "settings"
+                         && !backend.movieOpen
             }
         }
 
@@ -348,8 +437,7 @@ ApplicationWindow {
         PlayerView {
             id: playerView
             parent: win.expanded ? expandedHost
-                  : backend.section === "guide" && contentLoader.item && contentLoader.item.videoHost
-                    ? contentLoader.item.videoHost : infoPane.videoHost
+                  : win.currentPage && win.currentPage.videoHost ? win.currentPage.videoHost : infoPane.videoHost
             anchors.fill: parent
             visible: win.playingKey !== ""
         }
@@ -371,6 +459,7 @@ ApplicationWindow {
     Component { id: gridPage; PosterGrid {} }
     Component { id: guidePage; GuideGrid {} }
     Component { id: seriesPage; SeriesPage {} }
+    Component { id: moviePage; MoviePage {} }
     Component { id: sourcesPage; SourcesPage {} }
     Component { id: settingsPage; SettingsPage {} }
 }

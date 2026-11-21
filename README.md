@@ -10,8 +10,13 @@ Omarchy theme and language, and everything works from the keyboard.
   again fills the screen, and ↑ ↓ change channel.
 - **TV guide**: a grid of channels and programmes from the provider's XMLTV
   guide (plain or gzipped), matched by guide id or by channel name.
-- **Movies** and **series**, with seasons and episodes; the next episode
-  starts when one ends.
+- **Movies** open on a sheet with the synopsis, director, cast, genre and
+  running time from the provider, and play or resume from there.
+- **Series** show their synopsis and cast, a tab per season, and the
+  episodes of the season picked; the next episode starts when one ends.
+- **Audio and subtitles**: A changes the audio language and S turns
+  subtitles on or picks the next language, or use the buttons under the
+  picture. The languages picked last are chosen first on whatever plays next.
 - **Favourites**, **continue watching** (resume points for movies and
   episodes), and a search across everything.
 - **Settings** (8): Zap follows the Omarchy language, or one picked for Zap
@@ -43,12 +48,14 @@ readable only by you. Favourites and resume points are in
 | `1` – `8` | Live TV, TV guide, movies, series, favourites, continue watching, sources, settings |
 | `/` or `Ctrl+F` | Search |
 | `↑` `↓` `←` `→` | Move; Left goes back to the categories |
-| `Enter` | Play, or open a series; on the playing channel, full screen |
-| `Esc` | Back: leave full screen, close the series, clear the search |
+| `Enter` | Play, or open a movie's sheet or a series; on the playing channel, full screen |
+| `Esc` | Back: leave full screen, close the sheet or the series, clear the search |
 | `Space` | Pause and resume |
 | `↑` `↓`, `PgUp` `PgDn` | Previous and next channel while watching |
 | `←` `→`, `Shift+←` `→` | Skip 10 seconds or 1 minute in a movie or an episode |
 | `←` `→` in a series | Change season |
+| `A` | Change the audio language while watching |
+| `S` | Subtitles: off, or the next language |
 | `F` | Add to or remove from favourites |
 | `M` | Mute |
 | `+` `-` | Volume |

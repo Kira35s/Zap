@@ -16,21 +16,45 @@ Rectangle {
     readonly property bool waiting: player.error === MediaPlayer.NoError
         && (player.mediaStatus === MediaPlayer.LoadingMedia || player.mediaStatus === MediaPlayer.StalledMedia)
 
+    property string noticeText: ""
+    readonly property bool menuOpen: audioMenu.opened || subtitleMenu.opened
+
     function showOsd() {
         osd = true
         osdTimer.restart()
+    }
+    // A short message over the picture, like the track just picked.
+    function notice(text) {
+        noticeText = text
+        noticeTimer.restart()
+        showOsd()
     }
 
     Timer {
         id: osdTimer
         interval: 4000
-        onTriggered: view.osd = false
+        onTriggered: view.menuOpen ? restart() : (view.osd = false)
+    }
+    Timer {
+        id: noticeTimer
+        interval: 2500
+        onTriggered: view.noticeText = ""
     }
 
     VideoOutput {
         id: video
         anchors.fill: parent
         fillMode: VideoOutput.PreserveAspectFit
+    }
+
+    // Under the OSD, so its buttons and slider get their own clicks.
+    MouseArea {
+        anchors.fill: parent
+        hoverEnabled: win.expanded
+        cursorShape: win.expanded && !view.osd ? Qt.BlankCursor : Qt.ArrowCursor
+        onPositionChanged: if (win.expanded) view.showOsd()
+        onClicked: win.expanded ? view.showOsd() : win.setExpanded(true)
+        onDoubleClicked: if (win.expanded) win.setExpanded(false)
     }
 
     BusyIndicator {
@@ -90,17 +114,36 @@ Rectangle {
         background: Rectangle { color: "#aa000000"; radius: win.small }
     }
 
+    Label {
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.margins: win.expanded ? 28 : 10
+        visible: view.noticeText !== ""
+        text: view.noticeText
+        color: "white"
+        font.pixelSize: win.expanded ? 18 : 13
+        padding: 8
+        background: Rectangle { color: "#cc000000"; radius: win.small }
+    }
+
     // What's on, shown for a few seconds after anything changes.
     Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         height: osdColumn.implicitHeight + 72
-        visible: win.expanded && (view.osd || player.playbackState !== MediaPlayer.PlayingState)
+        visible: win.expanded && (view.osd || view.menuOpen || player.playbackState !== MediaPlayer.PlayingState)
         gradient: Gradient {
             GradientStop { position: 0; color: "transparent" }
             GradientStop { position: 0.35; color: "#cc000000" }
             GradientStop { position: 1; color: "#f0000000" }
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            hoverEnabled: true
+            acceptedButtons: Qt.NoButton
+            onPositionChanged: view.showOsd()
         }
 
         ColumnLayout {
@@ -191,10 +234,83 @@ Rectangle {
                 }
             }
 
+            // Language and subtitles, when the stream has a choice.
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                visible: player.audioTracks.length > 1 || player.subtitleTracks.length > 0
+
+                Button {
+                    id: audioButton
+                    visible: player.audioTracks.length > 1
+                    focusPolicy: Qt.NoFocus
+                    flat: true
+                    Material.foreground: "white"
+                    Material.roundedScale: theme.radius
+                    text: {
+                        win.trackRevision
+                        const track = win.tracks("audio")[Math.max(0, player.activeAudioTrack)]
+                        return qsTr("Audio: %1").arg(track ? track.label : "—") + "  ▾"
+                    }
+                    onClicked: audioMenu.open()
+                    Menu {
+                        id: audioMenu
+                        y: -height
+                        Repeater {
+                            model: audioMenu.opened ? win.tracks("audio") : []
+                            delegate: MenuItem {
+                                required property var modelData
+                                required property int index
+                                text: modelData.label
+                                checkable: true
+                                checked: (win.trackRevision, index === Math.max(0, player.activeAudioTrack))
+                                onTriggered: win.chooseAudio(index)
+                            }
+                        }
+                    }
+                }
+                Button {
+                    id: subtitleButton
+                    visible: player.subtitleTracks.length > 0
+                    focusPolicy: Qt.NoFocus
+                    flat: true
+                    Material.foreground: "white"
+                    Material.roundedScale: theme.radius
+                    text: {
+                        win.trackRevision
+                        const track = win.tracks("subtitle")[player.activeSubtitleTrack]
+                        return (track ? qsTr("Subtitles: %1").arg(track.label) : qsTr("Subtitles off")) + "  ▾"
+                    }
+                    onClicked: subtitleMenu.open()
+                    Menu {
+                        id: subtitleMenu
+                        y: -height
+                        MenuItem {
+                            text: qsTr("Off")
+                            checkable: true
+                            checked: (win.trackRevision, player.activeSubtitleTrack < 0)
+                            onTriggered: win.chooseSubtitle(-1)
+                        }
+                        Repeater {
+                            model: subtitleMenu.opened ? win.tracks("subtitle") : []
+                            delegate: MenuItem {
+                                required property var modelData
+                                required property int index
+                                text: modelData.label
+                                checkable: true
+                                checked: (win.trackRevision, index === player.activeSubtitleTrack)
+                                onTriggered: win.chooseSubtitle(index)
+                            }
+                        }
+                    }
+                }
+                Item { Layout.fillWidth: true }
+            }
+
             Label {
                 text: win.isLive
-                      ? qsTr("↑ ↓ change channel · Space pause · F favourite · Esc back to the list · ? shortcuts")
-                      : qsTr("← → 10 seconds · Shift+← → 1 minute · Space pause · Esc stop · ? shortcuts")
+                      ? qsTr("↑ ↓ change channel · Space pause · A audio · S subtitles · F favourite · Esc back to the list · ? shortcuts")
+                      : qsTr("← → 10 seconds · Shift+← → 1 minute · Space pause · A audio · S subtitles · Esc stop · ? shortcuts")
                 color: "#8b8b96"
                 font.pixelSize: 13
                 elide: Text.ElideRight
@@ -203,12 +319,4 @@ Rectangle {
         }
     }
 
-    MouseArea {
-        anchors.fill: parent
-        hoverEnabled: win.expanded
-        cursorShape: win.expanded && !view.osd ? Qt.BlankCursor : Qt.ArrowCursor
-        onPositionChanged: if (win.expanded) view.showOsd()
-        onClicked: win.expanded ? view.showOsd() : win.setExpanded(true)
-        onDoubleClicked: if (win.expanded) win.setExpanded(false)
-    }
 }

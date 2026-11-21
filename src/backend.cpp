@@ -8,6 +8,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QLocale>
 #include <QMap>
 #include <QProcess>
 #include <QSaveFile>
@@ -142,6 +143,8 @@ void Backend::loadState() {
             m_resume.insert(resume.entry.key, resume);
     }
     m_language = state.value("language").toString();
+    m_audioLanguage = state.value("audioLanguage").toString();
+    m_subtitleLanguage = state.value("subtitleLanguage").toString();
     if (state.contains("volume"))
         m_volume = std::clamp(state.value("volume").toDouble(), 0.0, 1.0);
 }
@@ -155,7 +158,8 @@ void Backend::saveState() {
                                   {"updated", double(r.updated)},
                                   {"entry", r.entry.toJson()}});
     if (!writeJson(m_dataDir + "/state.json",
-                   {{"favorites", QJsonArray::fromStringList(m_favorites)}, {"resume", resume}, {"volume", m_volume}, {"language", m_language}},
+                   {{"favorites", QJsonArray::fromStringList(m_favorites)}, {"resume", resume}, {"volume", m_volume}, {"language", m_language},
+                    {"audioLanguage", m_audioLanguage}, {"subtitleLanguage", m_subtitleLanguage}},
                    false)) {
         m_problems << tr("Favourites and resume points couldn't be saved to %1.").arg(m_dataDir);
         emit statusChanged();
@@ -237,6 +241,8 @@ void Backend::removeSource(const QString &id) {
     scheduleSave();
     if (m_series.sourceId == id)
         closeSeries();
+    if (m_movie.sourceId == id)
+        closeMovie();
     emit sourcesChanged();
     rebuildIndex();
     rebuildCategories();
@@ -534,6 +540,7 @@ void Backend::setSection(const QString &section) {
     m_section = section;
     m_category = m_categoryBySection.value(section);
     closeSeries();
+    closeMovie();
     rebuildCategories();
     rebuild();
     emit sectionChanged();
@@ -563,6 +570,46 @@ void Backend::setLanguage(const QString &language) {
     m_language = language;
     scheduleSave();
     emit languageChanged();
+}
+
+void Backend::setAudioLanguage(const QString &language) {
+    if (language == m_audioLanguage)
+        return;
+    m_audioLanguage = language;
+    scheduleSave();
+    emit tracksPreferenceChanged();
+}
+
+void Backend::setSubtitleLanguage(const QString &language) {
+    if (language == m_subtitleLanguage)
+        return;
+    m_subtitleLanguage = language;
+    scheduleSave();
+    emit tracksPreferenceChanged();
+}
+
+QVariantMap Backend::describeTrack(const QMediaMetaData &track, int index) const {
+    const auto language = track.value(QMediaMetaData::Language).value<QLocale::Language>();
+    const QString title = track.stringValue(QMediaMetaData::Title).trimmed();
+    QString code, name;
+    if (language != QLocale::AnyLanguage && language != QLocale::C) {
+        code = QLocale::languageToCode(language, QLocale::ISO639Part1);
+        if (code.isEmpty())
+            code = QLocale::languageToCode(language);
+        // Each language in its own words, as players usually list them; Qt
+        // calls English "American English" after its default territory.
+        name = language == QLocale::English ? QStringLiteral("English") : QLocale(language).nativeLanguageName();
+        if (name.isEmpty())
+            name = QLocale::languageToString(language);
+        if (!name.isEmpty())
+            name[0] = name[0].toUpper();
+    }
+    QString label = name;
+    if (!title.isEmpty() && title.compare(name, Qt::CaseInsensitive) != 0)
+        label = label.isEmpty() ? title : label + " — " + title;
+    if (label.isEmpty())
+        label = tr("Track %1").arg(index + 1);
+    return {{"language", code}, {"label", label}};
 }
 
 void Backend::setVolume(double volume) {
@@ -738,7 +785,9 @@ void Backend::openSeries(const QString &key) {
     const Entry series = lookup(key);
     if (series.kind != Entry::Series)
         return;
+    closeMovie();
     m_series = series;
+    m_seriesDetails = Details();
     m_seriesEpisodes.clear();
     m_season = 0;
     m_episodes->setEntries({});
@@ -760,10 +809,9 @@ void Backend::openSeries(const QString &key) {
                      addProblem(source, tr("download failed (%1)").arg(error));
                  QFile file(path);
                  const QByteArray data = file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
-                 QString plot;
-                 const auto episodes = CatalogParser::parseXtreamSeriesInfo(source, m_series, data, &plot);
+                 const auto episodes = CatalogParser::parseXtreamSeriesInfo(source, m_series, data, &m_seriesDetails);
                  if (m_series.plot.isEmpty())
-                     m_series.plot = plot;
+                     m_series.plot = m_seriesDetails.plot;
                  m_seriesLoading = false;
                  setEpisodes(episodes);
              });
@@ -803,6 +851,7 @@ void Backend::closeSeries() {
     if (!seriesOpen())
         return;
     m_series = Entry();
+    m_seriesDetails = Details();
     m_seriesEpisodes.clear();
     m_seriesLoading = false;
     m_season = 0;
@@ -813,8 +862,70 @@ void Backend::closeSeries() {
 QVariantMap Backend::series() const {
     if (!seriesOpen())
         return {};
-    QVariantMap map = EntryModel::toMap(m_series);
+    QVariantMap map = m_seriesDetails.toMap();
+    map.insert(EntryModel::toMap(m_series));
     map.insert("favorite", isFavorite(m_series.key));
+    map.insert("groupName", m_series.group.isEmpty() ? QString() : categoryName(m_series.group));
+    if (m_series.rating.isEmpty())
+        map.insert("rating", m_seriesDetails.rating);
+    if (m_series.logo.isEmpty())
+        map.insert("logo", m_seriesDetails.cover);
+    return map;
+}
+
+// Movies
+
+void Backend::openMovie(const QString &key) {
+    const Entry movie = lookup(key);
+    if (movie.kind != Entry::Movie)
+        return;
+    m_movie = movie;
+    m_movieDetails = Details();
+    const Source source = sourceById(movie.sourceId);
+    m_movieLoading = source.isXtream() && !movie.id.isEmpty();
+    emit movieChanged();
+    if (!m_movieLoading)
+        return;
+    const QString path = sourceDirectory(source.id) + "/movies/" + movie.id + ".json";
+    fetchAll({{source.xtreamApi("get_vod_info", "&vod_id=" + movie.id), path}}, CatalogAge,
+             [this, source, key, path](const QStringList &errors) {
+                 if (m_movie.key != key)
+                     return;
+                 for (const auto &error : errors)
+                     addProblem(source, tr("download failed (%1)").arg(error));
+                 QFile file(path);
+                 m_movieDetails = CatalogParser::parseXtreamVodInfo(file.open(QIODevice::ReadOnly) ? file.readAll()
+                                                                                                  : QByteArray());
+                 m_movieLoading = false;
+                 emit movieChanged();
+             });
+}
+
+void Backend::closeMovie() {
+    if (!movieOpen())
+        return;
+    m_movie = Entry();
+    m_movieDetails = Details();
+    m_movieLoading = false;
+    emit movieChanged();
+}
+
+QVariantMap Backend::movie() const {
+    if (!movieOpen())
+        return {};
+    QVariantMap map = m_movieDetails.toMap();
+    map.insert(EntryModel::toMap(m_movie));
+    map.insert("plot", m_movieDetails.plot.isEmpty() ? m_movie.plot : m_movieDetails.plot);
+    map.insert("favorite", isFavorite(m_movie.key));
+    map.insert("position", double(m_resume.value(m_movie.key).position));
+    map.insert("progress", progress(m_movie.key));
+    map.insert("groupName", m_movie.group.isEmpty() ? QString() : categoryName(m_movie.group));
+    if (m_movie.year.isEmpty())
+        map.insert("year", m_movieDetails.released.left(4));
+    if (m_movie.rating.isEmpty())
+        map.insert("rating", m_movieDetails.rating);
+    if (m_movie.logo.isEmpty())
+        map.insert("logo", m_movieDetails.cover);
     return map;
 }
 

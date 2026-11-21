@@ -5,7 +5,7 @@ import QtQuick.Layouts
 
 FocusScope {
     id: page
-    readonly property var info: backend.series
+    readonly property var info: (backend.revision, backend.series)
 
     function seasonIndex() {
         for (let i = 0; i < backend.seasons.length; ++i)
@@ -80,23 +80,43 @@ FocusScope {
                     Layout.fillWidth: true
                 }
                 Label {
-                    text: [page.info.year, page.info.rating ? "★ " + page.info.rating : "",
+                    text: [page.info.year, page.info.genre, page.info.rating ? "★ " + page.info.rating : "",
                            qsTr("%n seasons", "", backend.seasons.length)].filter(s => s).join(" · ")
                     color: win.muted
                     visible: !backend.seriesLoading
+                    wrapMode: Text.Wrap
+                    Layout.fillWidth: true
                 }
                 Label {
                     text: page.info.plot || ""
                     color: "#c4c4cc"
                     wrapMode: Text.Wrap
-                    maximumLineCount: 5
+                    maximumLineCount: 4
                     elide: Text.ElideRight
                     Layout.fillWidth: true
                 }
                 Label {
-                    text: qsTr("← → change season · Esc goes back")
+                    visible: !!page.info.director
+                    text: qsTr("Director: %1").arg(page.info.director || "")
+                    color: win.muted
+                    elide: Text.ElideRight
+                    Layout.fillWidth: true
+                }
+                Label {
+                    visible: (page.info.cast || []).length > 0
+                    text: qsTr("With %1").arg((page.info.cast || []).slice(0, 8).join(", "))
+                    color: win.muted
+                    wrapMode: Text.Wrap
+                    maximumLineCount: 2
+                    elide: Text.ElideRight
+                    Layout.fillWidth: true
+                }
+                Label {
+                    text: qsTr("← → or click: change season · ↑ ↓ choose an episode · Enter: play · Esc: back")
                     color: win.muted
                     font.pixelSize: 12
+                    wrapMode: Text.Wrap
+                    Layout.fillWidth: true
                 }
             }
         }
@@ -109,9 +129,11 @@ FocusScope {
             spacing: 6
             clip: true
             model: backend.seasons
+            currentIndex: page.seasonIndex()
+            onCurrentIndexChanged: positionViewAtIndex(currentIndex, ListView.Contain)
             delegate: Button {
                 required property var modelData
-                text: page.seasonName(modelData.season)
+                text: page.seasonName(modelData.season) + "  ·  " + modelData.count
                 flat: modelData.season !== backend.season
                 highlighted: modelData.season === backend.season
                 Material.roundedScale: theme.radius

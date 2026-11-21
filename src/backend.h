@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QFuture>
+#include <QMediaMetaData>
 #include <QHash>
 #include <QObject>
 #include <QStringList>
@@ -34,6 +35,11 @@ class Backend : public QObject, public EntryContext {
     Q_PROPERTY(QVariantMap series READ series NOTIFY seriesChanged)
     Q_PROPERTY(QVariantList seasons READ seasons NOTIFY seriesChanged)
     Q_PROPERTY(int season READ season WRITE setSeason NOTIFY seriesChanged)
+    Q_PROPERTY(bool movieOpen READ movieOpen NOTIFY movieChanged)
+    Q_PROPERTY(bool movieLoading READ movieLoading NOTIFY movieChanged)
+    Q_PROPERTY(QVariantMap movie READ movie NOTIFY movieChanged)
+    Q_PROPERTY(QString audioLanguage READ audioLanguage WRITE setAudioLanguage NOTIFY tracksPreferenceChanged)
+    Q_PROPERTY(QString subtitleLanguage READ subtitleLanguage WRITE setSubtitleLanguage NOTIFY tracksPreferenceChanged)
     Q_PROPERTY(QVariantList sources READ sources NOTIFY sourcesChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY statusChanged)
     Q_PROPERTY(QString status READ status NOTIFY statusChanged)
@@ -63,6 +69,15 @@ public:
     QVariantList seasons() const;
     int season() const { return m_season; }
     void setSeason(int season);
+    bool movieOpen() const { return !m_movie.key.isEmpty(); }
+    bool movieLoading() const { return m_movieLoading; }
+    QVariantMap movie() const;
+    // The languages last picked in the player, tried first on whatever plays
+    // next; an empty subtitle language means subtitles off.
+    QString audioLanguage() const { return m_audioLanguage; }
+    void setAudioLanguage(const QString &language);
+    QString subtitleLanguage() const { return m_subtitleLanguage; }
+    void setSubtitleLanguage(const QString &language);
     QVariantList sources() const;
     bool busy() const { return m_busy > 0; }
     QString status() const { return m_status; }
@@ -81,6 +96,10 @@ public:
     Q_INVOKABLE void toggleFavorite(const QString &key);
     Q_INVOKABLE void openSeries(const QString &key);
     Q_INVOKABLE void closeSeries();
+    Q_INVOKABLE void openMovie(const QString &key);
+    Q_INVOKABLE void closeMovie();
+    // A player track's language code and a name to show for it.
+    Q_INVOKABLE QVariantMap describeTrack(const QMediaMetaData &track, int index) const;
     Q_INVOKABLE double resumePosition(const QString &key) const;
     Q_INVOKABLE void savePosition(const QString &key, double position, double duration);
     Q_INVOKABLE void forget(const QString &key);
@@ -109,6 +128,8 @@ signals:
     void categoryChanged();
     void queryChanged();
     void seriesChanged();
+    void movieChanged();
+    void tracksPreferenceChanged();
     void sourcesChanged();
     void statusChanged();
     void revisionChanged();
@@ -165,6 +186,13 @@ private:
     QVector<Entry> m_seriesEpisodes;
     int m_season = 0;
     bool m_seriesLoading = false;
+    Details m_seriesDetails;
+
+    Entry m_movie;
+    Details m_movieDetails;
+    bool m_movieLoading = false;
+    QString m_audioLanguage;
+    QString m_subtitleLanguage;
 
     QStringList m_favorites;
     QHash<QString, Resume> m_resume;

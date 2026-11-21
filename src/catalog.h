@@ -5,6 +5,7 @@
 #include <QJsonObject>
 #include <QString>
 #include <QStringList>
+#include <QVariantMap>
 #include <QVector>
 
 // One thing the user can pick: a live channel, a movie, a series, or one of
@@ -66,6 +67,24 @@ struct Source {
     static Source fromJson(const QJsonObject &object);
 };
 
+// What a provider says about a movie or a series beyond its list entry.
+struct Details {
+    QString plot;
+    QString cast;     // comma-separated, as providers send it
+    QString director;
+    QString genre;
+    QString released; // a date or a year
+    QString country;
+    QString backdrop;
+    QString cover;
+    QString rating;
+    QString trailer;  // a YouTube video id
+    qint64 duration = 0; // seconds
+
+    bool isEmpty() const { return plot.isEmpty() && cast.isEmpty() && director.isEmpty() && genre.isEmpty(); }
+    QVariantMap toMap() const;
+};
+
 struct Catalog {
     QVector<Entry> live;
     QVector<Entry> movies;
@@ -83,7 +102,10 @@ namespace CatalogParser {
 Catalog parseM3u(const QByteArray &data, const QString &sourceId);
 Catalog parseXtream(const Source &source, const QHash<QString, QByteArray> &files);
 QVector<Entry> parseXtreamSeriesInfo(const Source &source, const Entry &series, const QByteArray &data,
-                                     QString *plot = nullptr);
+                                     Details *details = nullptr);
+// The "info" object of get_vod_info or get_series_info.
+Details parseXtreamDetails(const QJsonObject &info);
+Details parseXtreamVodInfo(const QByteArray &data);
 // The file names an Xtream source downloads, without ".json".
 QStringList xtreamActions();
 // Reads whatever a source has downloaded into its cache directory.

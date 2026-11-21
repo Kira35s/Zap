@@ -146,6 +146,7 @@ Rectangle {
             text: pane.info.kind === "live" ? qsTr("Enter: watch · Enter again: full screen · F: favourite")
                 : pane.info.kind === "series" ? qsTr("Enter: episodes · F: favourite")
                 : backend.section === "continue" ? qsTr("Enter: resume · Del: remove from the list")
+                : pane.info.kind === "movie" ? qsTr("Enter: movie details · F: favourite · O: open in mpv")
                 : qsTr("Enter: play · F: favourite · O: open in mpv")
             color: win.muted
             font.pixelSize: 12

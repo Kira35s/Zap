@@ -149,12 +149,16 @@ private slots:
         Entry show;
         show.key = "x:s:5";
         show.name = "Show";
-        const QByteArray json = R"({"info":{"plot":"A plot"},"episodes":{"2":[{"id":"22","episode_num":1,"season":2,"title":"Show - S02E01 - Return","container_extension":"mp4"}],
+        const QByteArray json = R"({"info":{"plot":"A plot","cast":"Ann, Bob,Ann","genre":"Drama","backdrop_path":["b/1.jpg"],"episode_run_time":"42"},"episodes":{"2":[{"id":"22","episode_num":1,"season":2,"title":"Show - S02E01 - Return","container_extension":"mp4"}],
                                     "1":[{"id":"12","episode_num":"2","title":"Show - S01E02","container_extension":"mkv","info":{"duration_secs":1500}},
                                          {"id":"11","episode_num":1,"title":"Pilot","container_extension":"mkv"}]}})";
-        QString plot;
-        const auto episodes = CatalogParser::parseXtreamSeriesInfo(s, show, json, &plot);
-        QCOMPARE(plot, QString("A plot"));
+        Details details;
+        const auto episodes = CatalogParser::parseXtreamSeriesInfo(s, show, json, &details);
+        QCOMPARE(details.plot, QString("A plot"));
+        QCOMPARE(details.genre, QString("Drama"));
+        QCOMPARE(details.backdrop, QString("b/1.jpg"));
+        QCOMPARE(details.duration, 42 * 60);
+        QCOMPARE(details.toMap().value("cast").toStringList(), QStringList({"Ann", "Bob"}));
         QCOMPARE(episodes.size(), 3);
         QCOMPARE(episodes[0].name, QString("Pilot"));
         QCOMPARE(episodes[1].name, QString("Show - S01E02")); // nothing left after stripping: kept whole
@@ -162,6 +166,20 @@ private slots:
         QCOMPARE(episodes[2].name, QString("Return"));
         QCOMPARE(episodes[2].season, 2);
         QVERIFY(episodes[2].url.endsWith("/22.mp4"));
+    }
+
+    void xtreamVodInfoGivesTheMovieSheet()
+    {
+        const Details d = CatalogParser::parseXtreamVodInfo(
+            R"({"info":{"description":"Heist","actors":"Ann, Bob","director":"Cid","genre":"Crime","releasedate":"2019-05-01",)"
+            R"("duration":"01:52:30","rating":"7.5","backdrop_path":[],"youtube_trailer":"abc"},"movie_data":{}})");
+        QCOMPARE(d.plot, QString("Heist"));
+        QCOMPARE(d.cast, QString("Ann, Bob"));
+        QCOMPARE(d.director, QString("Cid"));
+        QCOMPARE(d.duration, 6750);
+        QCOMPARE(d.backdrop, QString());
+        QCOMPARE(d.trailer, QString("abc"));
+        QVERIFY(CatalogParser::parseXtreamVodInfo("[]").isEmpty());
     }
 
     void xmltvTimesHonourTheOffset()
@@ -251,10 +269,16 @@ private slots:
             backend.setSection("movies");
             QCOMPARE(backend.entries()->count(), 1);
             const QString movie = backend.entries()->keyAt(0);
+            backend.openMovie(movie);
+            QVERIFY(backend.movieOpen());
+            QVERIFY(!backend.movieLoading()); // M3U movies have no sheet to download
+            QCOMPARE(backend.movie().value("key").toString(), movie);
             backend.toggleFavorite(movie);
+            QVERIFY(backend.movie().value("favorite").toBool());
             backend.savePosition(movie, 60000, 600000);
 
             backend.setSection("series");
+            QVERIFY(!backend.movieOpen()); // changing section closes the sheet
             backend.openSeries(backend.entries()->keyAt(0));
             QVERIFY(backend.seriesOpen());
             QCOMPARE(backend.episodes()->count(), 2);

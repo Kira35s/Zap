@@ -374,12 +374,64 @@ Catalog CatalogParser::parseXtream(const Source &source, const QHash<QString, QB
     return catalog;
 }
 
+QVariantMap Details::toMap() const {
+    QStringList people;
+    for (const QString &name : cast.split(','))
+        if (!name.trimmed().isEmpty() && !people.contains(name.trimmed()))
+            people << name.trimmed();
+    return {{"plot", plot},         {"cast", people},     {"director", director}, {"genre", genre},
+            {"released", released}, {"country", country}, {"backdrop", backdrop}, {"cover", cover},
+            {"detailRating", rating}, {"trailer", trailer}, {"runtime", double(duration)}};
+}
+
+Details CatalogParser::parseXtreamDetails(const QJsonObject &info) {
+    // Panels disagree on the names, so take the first one that's there.
+    auto first = [&](std::initializer_list<const char *> names) {
+        for (const char *name : names) {
+            const QJsonValue value = info.value(QLatin1String(name));
+            const QJsonArray list = value.toArray();
+            const QString found = value.isArray() ? (list.isEmpty() ? QString() : text(list.first())) : text(value);
+            if (!found.isEmpty() && found != "N/A" && found != "null")
+                return found;
+        }
+        return QString();
+    };
+    Details d;
+    d.plot = first({"plot", "description"});
+    d.cast = first({"cast", "actors"});
+    d.director = first({"director"});
+    d.genre = first({"genre"});
+    d.released = first({"releasedate", "releaseDate", "release_date"});
+    d.country = first({"country"});
+    d.backdrop = first({"backdrop_path", "backdrop"});
+    d.cover = first({"cover_big", "movie_image", "cover"});
+    d.rating = first({"rating"});
+    if (d.rating == "0")
+        d.rating.clear();
+    d.trailer = first({"youtube_trailer"});
+    d.duration = first({"duration_secs"}).toLongLong();
+    if (d.duration <= 0) {
+        // "01:52:00", or minutes for series' episode_run_time.
+        const QStringList parts = first({"duration"}).split(':');
+        if (parts.size() == 3)
+            d.duration = parts[0].toLongLong() * 3600 + parts[1].toLongLong() * 60 + parts[2].toLongLong();
+        else
+            d.duration = first({"episode_run_time"}).toLongLong() * 60;
+    }
+    return d;
+}
+
+Details CatalogParser::parseXtreamVodInfo(const QByteArray &data) {
+    const QJsonValue info = QJsonDocument::fromJson(data).object().value("info");
+    return info.isObject() ? parseXtreamDetails(info.toObject()) : Details();
+}
+
 QVector<Entry> CatalogParser::parseXtreamSeriesInfo(const Source &source, const Entry &series,
-                                                    const QByteArray &data, QString *plot) {
+                                                    const QByteArray &data, Details *details) {
     QVector<Entry> episodes;
     const QJsonObject root = QJsonDocument::fromJson(data).object();
-    if (plot)
-        *plot = text(root.value("info").toObject().value("plot"));
+    if (details)
+        *details = parseXtreamDetails(root.value("info").toObject());
 
     // "episodes" is an object keyed by season on most panels, and an array
     // of seasons on a few.

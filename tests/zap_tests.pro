@@ -1,4 +1,4 @@
-QT += core gui network concurrent qml quick testlib
+QT += core gui network concurrent qml quick testlib multimedia
 CONFIG += c++17 testcase
 TARGET = zap_tests
 TEMPLATE = app
