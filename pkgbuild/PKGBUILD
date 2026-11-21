@@ -1,4 +1,4 @@
-pkgname=zap
+pkgname=zap-iptv
 pkgver=0.1.0
 pkgrel=1
 pkgdesc='IPTV player: live TV with its guide, movies and series from Xtream Codes and M3U'
@@ -7,6 +7,7 @@ license=('MIT')
 depends=('qt6-base' 'qt6-declarative' 'qt6-multimedia' 'qt6-multimedia-ffmpeg' 'qt6-wayland' 'zlib')
 optdepends=('mpv: open a stream in mpv with O')
 makedepends=('gcc' 'make')
+conflicts=('zap')
 source=()
 sha256sums=()
 
